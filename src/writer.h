@@ -22,7 +22,7 @@ Given filename and graph, writes out the graph to storage
  - Should use WriteGraph(filename, serialized)
  - If serialized, will write out as serialized graph, otherwise, as edgelist
 */
-
+namespace gapbs {
 
 template <typename NodeID_, typename DestID_ = NodeID_>
 class WriterBase {
@@ -89,5 +89,5 @@ class WriterBase {
   CSRGraph<NodeID_, DestID_> &g_;
   std::string filename_;
 };
-
+}
 #endif  // WRITER_H_

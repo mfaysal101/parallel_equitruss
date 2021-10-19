@@ -42,7 +42,7 @@ more consistent performance for undirected graphs.
 
 
 using namespace std;
-
+using namespace gapbs;
 
 // The hooking condition (comp_u < comp_v) may not coincide with the edge's
 // direction, so we use a min-max swap such that lower component IDs propagate

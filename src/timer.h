@@ -14,6 +14,7 @@ Authors: Scott Beamer, Michael Sutton
 
 Simple timer that wraps std::chrono
 */
+namespace gapbs {
 
 class Timer {
  public:
@@ -45,5 +46,5 @@ class Timer {
 
 // Times op's execution using the timer t
 #define TIME_OP(t, op) { t.Start(); (op); t.Stop(); }
-
+}
 #endif  // TIMER_H_

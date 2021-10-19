@@ -36,7 +36,7 @@ which restructures and extends the Shiloach-Vishkin algorithm [2].
 
 
 using namespace std;
-
+using namespace gapbs;
 
 // Place nodes u and v in same component of lower component ID
 void Link(NodeID u, NodeID v, pvector<NodeID>& comp) {

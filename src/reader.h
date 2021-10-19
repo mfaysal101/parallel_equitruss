@@ -26,7 +26,7 @@ Given filename, returns an edgelist or the entire graph (if serialized)
    directly into the returned graph instance
  - Otherwise, reads the file and returns an edgelist
 */
-
+namespace gapbs {
 
 template <typename NodeID_, typename DestID_ = NodeID_,
           typename WeightT_ = NodeID_, bool invert = true>
@@ -306,5 +306,5 @@ class Reader {
       return CSRGraph<NodeID_, DestID_, invert>(num_nodes, index, neighs);
   }
 };
-
+}
 #endif  // READER_H_

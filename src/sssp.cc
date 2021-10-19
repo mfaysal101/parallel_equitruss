@@ -60,6 +60,7 @@ execution order, leading to significant speedup on large diameter road networks.
 
 
 using namespace std;
+using namespace gapbs;
 
 const WeightT kDistInf = numeric_limits<WeightT>::max()/2;
 const size_t kMaxBin = numeric_limits<size_t>::max()/2;

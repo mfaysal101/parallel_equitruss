@@ -18,7 +18,7 @@ Author: Scott Beamer
 Parallel bitmap that is thread-safe
  - Can set bits in parallel (set_bit_atomic) unlike std::vector<bool>
 */
-
+namespace gapbs {
 
 class Bitmap {
  public:
@@ -65,5 +65,5 @@ class Bitmap {
   static uint64_t word_offset(size_t n) { return n / kBitsPerWord; }
   static uint64_t bit_offset(size_t n) { return n & (kBitsPerWord - 1); }
 };
-
+}
 #endif  // BITMAP_H_

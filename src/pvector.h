@@ -17,7 +17,7 @@ Vector class with ability to not initialize or do initialize in parallel
  - When pvector is resized, new elements are uninitialized
  - Resizing is not thread-safe
 */
-
+namespace gapbs {
 
 template <typename T_>
 class pvector {
@@ -168,5 +168,5 @@ class pvector {
   T_* end_capacity_;
   static const size_t growth_factor = 2;
 };
-
+}
 #endif  // PVECTOR_H_

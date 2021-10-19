@@ -25,7 +25,7 @@ Author: Scott Beamer
 
 Various helper functions to ease writing of kernels
 */
-
+namespace gapbs {
 
 // Default type signatures for commonly used types
 typedef int32_t NodeID;
@@ -121,5 +121,5 @@ void BenchmarkKernel(const CLApp &cli, const GraphT_ &g,
   }
   PrintTime("Average Time", total_seconds / cli.num_trials());
 }
-
+}
 #endif  // BENCHMARK_H_

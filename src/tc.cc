@@ -48,6 +48,7 @@ to relabel the graph, we use the heuristic in WorthRelabelling.
 
 
 using namespace std;
+using namespace gapbs;
 
 size_t OrderedCount(const Graph &g) {
   size_t total = 0;

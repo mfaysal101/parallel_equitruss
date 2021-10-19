@@ -26,7 +26,7 @@ Given scale and degree, generates edgelist for synthetic graph
  - Can also randomize weights within a weighted edgelist (InsertWeights)
  - Blocking/reseeding is for parallelism with deterministic output edgelist
 */
-
+namespace gapbs {
 
 template <typename NodeID_, typename DestID_ = NodeID_,
           typename WeightT_ = NodeID_>
@@ -151,5 +151,5 @@ class Generator {
   int64_t num_edges_;
   static const int64_t block_size = 1<<18;
 };
-
+}
 #endif  // GENERATOR_H_

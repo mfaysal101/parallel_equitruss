@@ -17,7 +17,7 @@ Author: Scott Beamer
 
 Miscellaneous helpers that don't fit into classes
 */
-
+namespace gapbs {
 
 static const int64_t kRandSeed = 27491095;
 
@@ -81,5 +81,5 @@ class Range{
   RangeIter<T_> begin() const { return RangeIter<T_>(from_); }
   RangeIter<T_> end() const { return RangeIter<T_>(to_); }
 };
-
+}
 #endif  // UTIL_H_

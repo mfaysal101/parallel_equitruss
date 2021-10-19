@@ -24,7 +24,7 @@ Simple container for graph in CSR format
  - To make weighted, set DestID_ template type to NodeWeight
  - MakeInverse parameter controls whether graph stores its inverse
 */
-
+namespace gapbs {
 
 // Used to hold node & weight, with another node it makes a weighted edge
 template <typename NodeID_, typename WeightT_>
@@ -271,5 +271,5 @@ class CSRGraph {
   DestID_** in_index_;
   DestID_*  in_neighbors_;
 };
-
+}
 #endif  // GRAPH_H_

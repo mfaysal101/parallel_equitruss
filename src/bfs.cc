@@ -42,6 +42,7 @@ them in parent array as negative numbers. Thus the encoding of parent is:
 
 
 using namespace std;
+using namespace gapbs;
 
 int64_t BUStep(const Graph &g, pvector<NodeID> &parent, Bitmap &front,
                Bitmap &next) {

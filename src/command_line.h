@@ -24,6 +24,9 @@ Handles command line argument parsing
  - For example, most kernels will use CLApp
 */
 
+extern char *optarg;          // from and for getopt
+
+namespace gapbs {
 
 class CLBase {
  protected:
@@ -68,7 +71,6 @@ class CLBase {
 
   bool ParseArgs() {
     signed char c_opt;
-    extern char *optarg;          // from and for getopt
     while ((c_opt = getopt(argc_, argv_, get_args_.c_str())) != -1) {
       HandleArg(c_opt, optarg);
     }
@@ -250,5 +252,5 @@ class CLConvert : public CLBase {
   bool out_el() const { return out_el_; }
   bool out_sg() const { return out_sg_; }
 };
-
+}
 #endif  // COMMAND_LINE_H_

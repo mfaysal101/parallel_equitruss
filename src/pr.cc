@@ -26,6 +26,7 @@ implemention is still available in src/pr_spmv.cc.
 
 
 using namespace std;
+using namespace gapbs;
 
 typedef float ScoreT;
 const float kDamp = 0.85;

@@ -44,6 +44,7 @@ propagation phase.
 
 
 using namespace std;
+using namespace gapbs;
 typedef float ScoreT;
 typedef double CountT;
 

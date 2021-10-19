@@ -28,6 +28,7 @@ until the next iteration (like Jacobi-style method).
 
 
 using namespace std;
+using namespace gapbs;
 
 typedef float ScoreT;
 const float kDamp = 0.85;

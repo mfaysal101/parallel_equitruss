@@ -11,6 +11,7 @@
 #include "writer.h"
 
 using namespace std;
+using namespace gapbs;
 
 int main(int argc, char* argv[]) {
   CLConvert cli(argc, argv, "converter");

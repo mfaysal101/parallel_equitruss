@@ -18,7 +18,7 @@ Double-buffered queue so appends aren't seen until SlideWindow() called
  - Use QueueBuffer when used in parallel to avoid false sharing by doing
    bulk appends from thread-local storage
 */
-
+namespace gapbs {
 
 template <typename T>
 class QueueBuffer;
@@ -107,5 +107,5 @@ class QueueBuffer {
     in = 0;
   }
 };
-
+}
 #endif  // SLIDING_QUEUE_H_

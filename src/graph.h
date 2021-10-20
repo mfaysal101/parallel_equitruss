@@ -248,8 +248,9 @@ class CSRGraph {
     return index;
   }
 
-  pvector<SGOffset> VertexOffsets(bool in_graph = false) const {
-    pvector<SGOffset> offsets(num_nodes_+1);
+  template <typename index_t=SGOffset>
+  pvector<index_t> VertexOffsets(bool in_graph = false) const {
+    pvector<index_t> offsets(num_nodes_+1);
     for (NodeID_ n=0; n < num_nodes_+1; n++)
       if (in_graph)
         offsets[n] = in_index_[n] - in_index_[0];

@@ -114,6 +114,8 @@ class CSRGraph {
     typedef DestID_* iterator;
     iterator begin() { return g_index_[n_] + start_offset_; }
     iterator end()   { return g_index_[n_+1]; }
+    DestID_& operator[](NodeID_ m_) { return *(begin()+m_); }
+    DestID_ operator[](NodeID_ m_) const { return *(g_index_[n_]+start_offset_+m_); }
   };
 
   void ReleaseResources() {

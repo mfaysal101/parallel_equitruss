@@ -24,11 +24,12 @@ namespace gapbs {
 namespace tc {
 
 // heuristic to see if sufficently dense power-law graph
-bool WorthRelabelling(const Graph &g) {
+template <typename GraphT_>
+bool WorthRelabelling(const GraphT_ &g) {
   int64_t average_degree = g.num_edges() / g.num_nodes();
   if (average_degree < 10)
     return false;
-  SourcePicker<Graph> sp(g);
+  SourcePicker<GraphT_> sp(g);
   int64_t num_samples = std::min(int64_t(1000), g.num_nodes());
   int64_t sample_total = 0;
   pvector<int64_t> samples(num_samples);
@@ -42,26 +43,52 @@ bool WorthRelabelling(const Graph &g) {
   return sample_average / 1.3 > sample_median;
 }
 
-void PrintTriangleStats(const Graph &g, size_t total_triangles) {
+template <typename GraphT_=Graph>
+void PrintTriangleStats(const GraphT_ &g, size_t total_triangles) {
     std::cout << total_triangles << " triangles" << std::endl;
 }
 
 // Compares with simple serial implementation that uses std::set_intersection
-bool TCVerifier(const Graph &g, size_t test_total) {
+template <typename GraphT_=Graph>
+bool TCVerifier(const GraphT_ &g, size_t test_total) {
+  #ifdef _OPENMP
+  #ifdef _GLIBCXX_PARALLEL
+    #undef _GLIBCXX_PARALLEL
+  #endif
+  #endif
+
   size_t total = 0;
   std::vector<NodeID> intersection;
-  intersection.reserve(g.num_nodes());
-  for (NodeID u : g.vertices()) {
+  std::vector<NodeID> neigh_u, neigh_v;
+  intersection.resize(g.num_nodes());
+  for (NodeID u : g.vertices() ) {
+    neigh_u.resize(g.out_degree(u));
+    NodeID i = 0;
+    for ( NodeID v : g.out_neigh(u) ) {
+      neigh_u[i++] = v;
+    }
+
     for (NodeID v : g.out_neigh(u)) {
-        auto new_end = std::set_intersection(g.out_neigh(u).begin(),
-                                             g.out_neigh(u).end(),
-                                             g.out_neigh(v).begin(),
-                                             g.out_neigh(v).end(),
+        neigh_v.resize(g.out_degree(v));
+        NodeID j = 0;
+        for ( NodeID w : g.out_neigh(v) ) {
+          neigh_v[j++] = w;
+        }
+
+        auto new_end = std::set_intersection(neigh_u.begin(),
+                                             neigh_u.end(),
+                                             neigh_v.begin(),
+                                             neigh_v.end(),
                                              intersection.begin());
-      intersection.resize(new_end - intersection.begin());
-      total += intersection.size();
+      total += std::distance(intersection.begin(), new_end);
     }
   }
+  #ifdef _OPENMP
+  #ifndef _GLIBCXX_PARALLEL
+    #define _GLIBCXX_PARALLEL
+  #endif
+  #endif
+
   total = total / 6;  // each triangle was counted 6 times
   if (total != test_total)
       std::cout << total << " != " << test_total << std::endl;

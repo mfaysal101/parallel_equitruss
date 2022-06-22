@@ -119,15 +119,23 @@ class CSRGraph {
   };
 
   void ReleaseResources() {
-    if (out_index_ != nullptr)
+    if (out_index_ != nullptr) {
       delete[] out_index_;
-    if (out_neighbors_ != nullptr)
+      out_index_ = nullptr;
+    }
+    if (out_neighbors_ != nullptr) {
       delete[] out_neighbors_;
+      out_neighbors_ = nullptr;
+    }
     if (directed_) {
-      if (in_index_ != nullptr)
+        if (in_index_ != nullptr) {
         delete[] in_index_;
-      if (in_neighbors_ != nullptr)
+        in_index_ = nullptr;
+      }
+      if (in_neighbors_ != nullptr) {
         delete[] in_neighbors_;
+        in_neighbors_ = nullptr;
+      }
     }
   }
 

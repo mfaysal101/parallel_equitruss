@@ -72,6 +72,7 @@ class pvector {
   void ReleaseResources(){
     if (start_ != nullptr) {
       delete[] start_;
+      start_ = nullptr;
     }
   }
 

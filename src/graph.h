@@ -141,6 +141,7 @@ class CSRGraph {
 
 
  public:
+  using node_t = NodeID_;
   CSRGraph() : directed_(false), num_nodes_(-1), num_edges_(-1),
     out_index_(nullptr), out_neighbors_(nullptr),
     in_index_(nullptr), in_neighbors_(nullptr) {}

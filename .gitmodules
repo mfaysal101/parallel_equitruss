@@ -1,0 +1,3 @@
+[submodule "gapbs-agile"]
+	path = gapbs-agile
+	url = https://socks.lbl.gov/cychan/gapbs-agile.git

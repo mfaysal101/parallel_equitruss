@@ -17,8 +17,6 @@
 #include "util.h"
 #include "writer.h"
 
-#include <asa/asa.h>
-
 /*
 GAP Benchmark Suite
 File:   Benchmark
@@ -105,11 +103,9 @@ void BenchmarkKernel(const CLApp &cli, const GraphT_ &g,
   double total_seconds = 0;
   Timer trial_timer;
   for (int iter=0; iter < cli.num_trials(); iter++) {
-    asa::roi_begin();
     trial_timer.Start();
     auto result = kernel(g);
     trial_timer.Stop();
-    asa::roi_end();
     PrintTime("Trial Time", trial_timer.Seconds());
     total_seconds += trial_timer.Seconds();
     if (cli.do_analysis() && (iter == (cli.num_trials()-1)))

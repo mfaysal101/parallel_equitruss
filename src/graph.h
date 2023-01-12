@@ -142,6 +142,7 @@ class CSRGraph {
 
  public:
   using node_t = NodeID_;
+  using dest_t = DestID_;
   CSRGraph() : directed_(false), num_nodes_(-1), num_edges_(-1),
     out_index_(nullptr), out_neighbors_(nullptr),
     in_index_(nullptr), in_neighbors_(nullptr) {}
@@ -272,6 +273,17 @@ class CSRGraph {
 
   Range<NodeID_> vertices() const {
     return Range<NodeID_>(num_nodes());
+  }
+
+ /**
+  * Returns key value pair from matrix
+  * Called unsafe since it will return a value even if u,v not
+  * found, i.e. requires extra error checking by user
+  */
+  DestID_& get_unsafe(NodeID_ u, NodeID_ v) {
+    auto v_it = std::lower_bound(out_neigh(u).begin(),
+                                 out_neigh(u).end(), DestID_{v});
+    return *v_it;
   }
 
  private:

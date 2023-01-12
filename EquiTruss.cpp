@@ -12,6 +12,8 @@
 #include <map>
 #include<climits>
 
+#include "gapbs-agile/src/benchmark.h"
+
 using namespace std;
 
 
@@ -30,7 +32,6 @@ int numVertices;
 bool hooking;
 size_t maxk;
 std::vector<std::vector<int>> intersectlist;
-std::map<pair<int, int>, int>trussk;
 std::map<int, vector<pair<int, int>>>trussgroups;
 std::map<pair<int, int>, int> edge2index;
 //std::vector<std::set<pair<pair<int, int>, pair<int, int>>>> super_edges;
@@ -39,6 +40,25 @@ std::vector<std::pair<int, int>> summary_graph;
 int kmin, kmax;
 double hooking_time, compression_time, sp_edge_time, summary_merge_time;
 std::map<int, int>iters_per_k;
+
+class CLEquiTruss : public gapbs::CLApp {
+    std::string _trussness_filename;
+public:
+    CLEquiTruss(int argc, char** argv, std::string name)
+        : CLApp(argc, argv, name) {
+        get_args_ += "t:";
+        AddHelpLine('t', "file", "Input graph with edge trussness");
+    }
+
+    void HandleArg(signed char opt, char* opt_arg) override {
+        switch (opt) {
+        case 't':  _trussness_filename = std::string(opt_arg); break;
+        default: CLApp::HandleArg(opt, opt_arg);
+        }
+    }
+
+    std::string trussness_filename() const { return _trussness_filename; }
+};
 
 namespace
 {
@@ -89,51 +109,26 @@ size_t getNumVertices(const EdgeList& edges)
 	return numVertices;
 }
 
-EdgeList ReadEdgeListFromFile(const char* filename)
+EdgeList BuildEdgeListFrom(const gapbs::WGraph& support)
 {
 	EdgeList edgelist;
+        numEdges = support.num_edges();
+        edgelist.reserve(support.num_edges());
+        for ( int u = 0; u < support.num_nodes(); ++u ) {
+            for ( auto& dest : support.out_neigh(u) ) {
+                auto v = dest.v;
+                if ( u < v )
+                    edgelist.push_back({u,v});
+            }
+        }
 
-	cout << "Reading network " << filename << " file\n";
-
-	ifstream infile(filename);
-
-	if (infile)
-	{
-		printf("File open successful\n");
-	}
-	else
-	{
-		printf("Failed to read file\n");
-		exit(1);
-	}
-
-	string line = "";
-	numEdges = 0;
-
-	int index = 0;
-
-	while (getline(infile, line))
-	{
-		istringstream iss(line);
-		int src, dst;
-		if ((iss >> src >> dst))
-		{
-			if(src == dst)
-			{
-				continue;
-			}
-			edgelist.push_back(make_pair(src, dst));
-		}
-	}
-
-	numEdges = edgelist.size();
 
 	cout << "Total number of edges:" << numEdges << endl;
 
 	sort(edgelist.begin(), edgelist.end(), [](const pair<int, int>& edge1, const pair<int, int>& edge2) {
 		return (edge1.first < edge2.first) || (edge1.first == edge2.first && edge1.second < edge2.second);
 		});
-
+        int index{0};
 	for(auto edge:edgelist)
 	{
 		edge2index[edge] = index++;
@@ -323,7 +318,7 @@ void computeTruss(const EdgeList& edges)
 }
 
 
-void edge_hooking(const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
+void edge_hooking(gapbs::WGraph& support, const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
 {
 
 #pragma omp parallel for
@@ -345,37 +340,12 @@ void edge_hooking(const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
 			int u = e.first;
 			int v = e.second;
 
-			pair<int, int> e1;
-			pair<int, int> e2;
-			int k1, k2;
-
-			auto it1 = trussk.find({u, w});
-			if(it1 != trussk.end())
-			{
-				e1.first = u;
-				e1.second = w;
-				k1 = it1->second;
-			}
-			else
-			{
-				e1.first = w;
-				e1.second = u;
-				k1 = trussk[e1];
-			}
-			
-			auto it2 = trussk.find({v, w});
-			if(it2 != trussk.end())
-			{
-				e2.first = v;
-				e2.second = w;
-				k2 = it2->second;
-			}
-			else
-			{
-				e2.first = w;
-				e2.second = v;
-				k2 = trussk[e2];
-			}
+			pair<int, int> e1{min(u,w), max(u,w)};
+			pair<int, int> e2{min(v,w), max(v,w)};
+                        // returns a key, value pair, the value is specified by w (for weight)
+                        // should not be confused with w (the vertex)
+			int k1 = support.get_unsafe(u,w).w;
+                        int k2 = support.get_unsafe(v,w).w;
 
 			/*
 			if (k1 >= k && k2 >= k)	//ensuring k-triangle
@@ -448,7 +418,7 @@ void edge_compression(const EdgeList& edges, vector<pair<int, int>>& phi_k)
 }
 
 
-void super_edge_creation(const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
+void super_edge_creation(gapbs::WGraph& support, const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
 {
 
 #pragma omp parallel for
@@ -471,37 +441,10 @@ void super_edge_creation(const EdgeList& edges, vector<pair<int, int>>& phi_k, i
 			int u = e.first;
 			int v = e.second;
 
-			pair<int, int> e1;
-			pair<int, int> e2;
-			int k1, k2;
-			
-			auto it1 = trussk.find({u, w});
-			if(it1 != trussk.end())
-			{
-				e1.first = u;
-				e1.second = w;
-				k1 = it1->second;
-			}
-			else
-			{
-				e1.first = w;
-				e1.second = u;
-				k1 = trussk[e1];
-			}
-			
-			auto it2 = trussk.find({v, w});
-			if(it2 != trussk.end())
-			{
-				e2.first = v;
-				e2.second = w;
-				k2 = it2->second;
-			}
-			else
-			{
-				e2.first = w;
-				e2.second = v;
-				k2 = trussk[e2];
-			}
+			pair<int, int> e1{min(u,w), max(u,w)};
+			pair<int, int> e2{min(v,w), max(v,w)};
+			int k1 = support.get_unsafe(u,w).w;
+                        int k2 = support.get_unsafe(v,w).w;
 
 			int lowest_k = min(k1, k2);
 			lowest_k = min(k, lowest_k);
@@ -520,7 +463,7 @@ void super_edge_creation(const EdgeList& edges, vector<pair<int, int>>& phi_k, i
 }
 
 
-void conn_comp_edge(const EdgeList& edges)
+void conn_comp_edge(gapbs::WGraph& support, const EdgeList& edges)
 {
 
 	size_t numThreads = 1;
@@ -545,7 +488,7 @@ void conn_comp_edge(const EdgeList& edges)
 			it_count++;
 			hooking = false;
 			auto hook_start = std::chrono::high_resolution_clock::now();
-			edge_hooking(edges, trussgroups[i], i);
+			edge_hooking(support, edges, trussgroups[i], i);
 			auto hook_end = std::chrono::high_resolution_clock::now();
 			hooking_time += std::chrono::duration_cast<std::chrono::nanoseconds>(hook_end - hook_start).count();
 
@@ -557,24 +500,35 @@ void conn_comp_edge(const EdgeList& edges)
 		it_count++;	//this extra increment is to ensure the one extra iteration for super-edge creation (algorithm 5.5) is counted
 		iters_per_k.insert({i, it_count});
 		auto se_start = std::chrono::high_resolution_clock::now();
-		super_edge_creation(edges, trussgroups[i], i);
+		super_edge_creation(support, edges, trussgroups[i], i);
 		auto se_end = std::chrono::high_resolution_clock::now();
 		sp_edge_time += std::chrono::duration_cast<std::chrono::nanoseconds>(se_end - se_start).count();
 		
 	}
 }
 
-void readTruss(ifstream& in)
+void readTruss(ifstream& in, gapbs::WGraph& support)
 {
 	string line = "";
+        vector<int>tuple;
+
+        auto setTrussness = [&support](int u, int v, int k) {
+            auto& dest_ = support.get_unsafe(u,v);
+            //operator() for NodeId returns the node id
+            if (dest_.v != v) {
+                cerr << "Error: unable to find vertex {"<<u<<","
+                     << v<<"} in graph" << endl;
+            }
+            dest_.w = k;
+        };
 
 	if (in.is_open())
 	{
 		while (getline(in, line))
 		{
+                        tuple.clear();
 			istringstream iss(line);
 			string token;
-			vector<int>tuple;
 
 			while (getline(iss, token, ','))
 			{
@@ -586,7 +540,9 @@ void readTruss(ifstream& in)
 			temp.second = tuple[1];
 			kmin = min(kmin, tuple[2]);
 			kmax = max(kmax, tuple[2]);
-			trussk.insert(make_pair(temp, tuple[2]));
+                        //duplicated so that we store full trussness
+                        setTrussness(temp.first, temp.second, tuple[2]);
+                        setTrussness(temp.second, temp.first, tuple[2]);
 			trussgroups[tuple[2]].push_back(temp);
 		}
 	}
@@ -631,6 +587,7 @@ void printSummaryGraph(ofstream& out)
 
 void initializeEdgeParent(const EdgeList& edges)
 {
+        #pragma omp parallel for
 	for (int i = 0; i < edges.size(); i++)
 	{
 		p[edges[i]] = i;
@@ -674,22 +631,33 @@ void createSummaryGraph(const EdgeList& edges)
 
 int main(int argc, char* argv[])
 {
-	string networkfile;
-	string trussfile;
+        CLEquiTruss cli(argc, argv, "Equitruss-only");
+        if (!cli.ParseArgs())
+                return -1;
+        gapbs::WeightedBuilder b(cli);
+        gapbs::WGraph support = b.MakeGraph();
+        if ( support.directed() ) {
+            cout << "Input graph is directed but equitruss requires undirected" << endl;
+        }
+        support.PrintStats();
 
-	networkfile = argv[1];
-	trussfile = argv[2];
+	string trussfile = cli.trussness_filename();
 
-	kmin = INT_MAX;
-	kmax = INT_MIN;
+        kmin = std::numeric_limits<gapbs::WeightT>::max();
+	kmax = std::numeric_limits<gapbs::WeightT>::min();
 
-	EdgeList edgelist = ReadEdgeListFromFile(networkfile.c_str());
+	EdgeList edgelist = BuildEdgeListFrom(support);
 
 	//ofstream out1("out1.txt"), out2("out2.txt");
-	
+
 	ofstream out3("out3.txt"), out4("out4.txt");
 
 	ifstream trussinput(trussfile.c_str());
+        // This function currently read the trussness of all the edges from
+	// a file generated by serial code k-truss decomposition
+	readTruss(trussinput, support);
+        //Print out graph with trussness values
+        //support.PrintTopology();
 
 	EdgeToAdjList(edgelist);
 
@@ -725,18 +693,14 @@ int main(int argc, char* argv[])
 	printf("========parallel_time:%0.9f===========\n", p_time * (1e-9));
 	
 	*/
-	
+
 	// This function initialize the parent component ID of each edge to itself
 	initializeEdgeParent(edgelist);
 
 	// Sorting the adjacency list for faster edge intersection
-	sortEachAdjList();
+        sortEachAdjList();
 
 	populateIntersectList(edgelist);
-
-	// This function currently read the trussness of all the edges from
-	// a file generated by serial code k-truss decomposition
-	readTruss(trussinput);
 
 	hooking_time = 0.0;
 	compression_time = 0.0;
@@ -746,7 +710,7 @@ int main(int argc, char* argv[])
 	auto start = std::chrono::high_resolution_clock::now();
 
 	// This function is the Shiloach-Vishkin connected component over edges
-	conn_comp_edge(edgelist);
+	conn_comp_edge(support, edgelist);
 
 	// This function is right now serial, need to design parallel implementation
 	createSummaryGraph(edgelist);

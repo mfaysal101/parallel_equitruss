@@ -47,10 +47,11 @@ using namespace gapbs;
 // The hooking condition (comp_u < comp_v) may not coincide with the edge's
 // direction, so we use a min-max swap such that lower component IDs propagate
 // independent of the edge's direction.
-pvector<NodeID> ShiloachVishkin(const Graph &g) {
-  pvector<NodeID> comp(g.num_nodes());
+template <class GraphT_, class NodeT_>
+pvector<NodeT_> ShiloachVishkin(const GraphT_ &g) {
+  pvector<NodeT_> comp(g.num_nodes());
   #pragma omp parallel for
-  for (NodeID n=0; n < g.num_nodes(); n++)
+  for (NodeT_ n=0; n < g.num_nodes(); n++)
     comp[n] = n;
   bool change = true;
   int num_iter = 0;
@@ -58,14 +59,14 @@ pvector<NodeID> ShiloachVishkin(const Graph &g) {
     change = false;
     num_iter++;
     #pragma omp parallel for
-    for (NodeID u=0; u < g.num_nodes(); u++) {
-      for (NodeID v : g.out_neigh(u)) {
-        NodeID comp_u = comp[u];
-        NodeID comp_v = comp[v];
+    for (NodeT_ u=0; u < g.num_nodes(); u++) {
+      for (NodeT_ v : g.out_neigh(u)) {
+        NodeT_ comp_u = comp[u];
+        NodeT_ comp_v = comp[v];
         if (comp_u == comp_v) continue;
         // Hooking condition so lower component ID wins independent of direction
-        NodeID high_comp = comp_u > comp_v ? comp_u : comp_v;
-        NodeID low_comp = comp_u + (comp_v - high_comp);
+        NodeT_ high_comp = comp_u > comp_v ? comp_u : comp_v;
+        NodeT_ low_comp = comp_u + (comp_v - high_comp);
         if (high_comp == comp[high_comp]) {
           change = true;
           comp[high_comp] = low_comp;
@@ -73,7 +74,7 @@ pvector<NodeID> ShiloachVishkin(const Graph &g) {
       }
     }
     #pragma omp parallel for
-    for (NodeID n=0; n < g.num_nodes(); n++) {
+    for (NodeT_ n=0; n < g.num_nodes(); n++) {
       while (comp[n] != comp[comp[n]]) {
         comp[n] = comp[comp[n]];
       }
@@ -156,6 +157,9 @@ int main(int argc, char* argv[]) {
     return -1;
   Builder b(cli);
   Graph g = b.MakeGraph();
-  BenchmarkKernel(cli, g, ShiloachVishkin, PrintCompStats, CCVerifier);
+  auto ShiloachVishkin_ = [](const Graph& g_) {
+      return ShiloachVishkin<Graph, NodeID>(g_);
+  };
+  BenchmarkKernel(cli, g, ShiloachVishkin_, PrintCompStats, CCVerifier);
   return 0;
 }

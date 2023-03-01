@@ -11,19 +11,21 @@ namespace gapbs {
 // The hooking condition (comp_u < comp_v) may not coincide with the edge's
 // direction, so we use a min-max swap such that lower component IDs propagate
 // independent of the edge's direction.
-template <class GraphT_, class NodeT_>
-pvector<NodeT_> ShiloachVishkin(const GraphT_ &g) {
-  pvector<NodeT_> comp(g.num_nodes());
+template <class GraphT_, class NodeT_, class RangeT_>
+void ShiloachVishkin(const GraphT_ &g, RangeT_ &&r, pvector<NodeT_>& comp) {
   #pragma omp parallel for
-  for (NodeT_ n=0; n < g.num_nodes(); n++)
+  for (auto n_iter=r.begin(); n_iter != r.end(); ++n_iter) {
+    auto& n = *n_iter;
     comp[n] = n;
+  }
   bool change = true;
   int num_iter = 0;
   while (change) {
     change = false;
     num_iter++;
     #pragma omp parallel for
-    for (NodeT_ u=0; u < g.num_nodes(); u++) {
+    for (auto u_iter=r.begin(); u_iter != r.end(); ++u_iter) {
+      auto& u = *u_iter;
       for (NodeT_ v : g.out_neigh(u)) {
         NodeT_ comp_u = comp[u];
         NodeT_ comp_v = comp[v];
@@ -38,14 +40,14 @@ pvector<NodeT_> ShiloachVishkin(const GraphT_ &g) {
       }
     }
     #pragma omp parallel for
-    for (NodeT_ n=0; n < g.num_nodes(); n++) {
+    for (auto n_iter=r.begin(); n_iter != r.end(); ++n_iter) {
+      auto& n = *n_iter;
       while (comp[n] != comp[comp[n]]) {
         comp[n] = comp[comp[n]];
       }
     }
   }
   std::cout << "Shiloach-Vishkin took " << num_iter << " iterations" << std::endl;
-  return comp;
 }
 }
 

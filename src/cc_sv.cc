@@ -119,7 +119,9 @@ int main(int argc, char* argv[]) {
   Builder b(cli);
   Graph g = b.MakeGraph();
   auto ShiloachVishkin_ = [](const Graph& g_) {
-      return ShiloachVishkin<Graph, NodeID>(g_);
+      pvector<NodeID> comp(g_.num_nodes());
+      ShiloachVishkin<Graph, NodeID>(g_, g_.vertices(), comp);
+      return comp;
   };
   BenchmarkKernel(cli, g, ShiloachVishkin_, PrintCompStats, CCVerifier);
   return 0;

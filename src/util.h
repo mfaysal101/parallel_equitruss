@@ -66,6 +66,7 @@ class RangeIter {
   bool operator!=(RangeIter const& other) const { return x_ != other.x_; }
   T_ const& operator*() const { return x_; }
   T_ operator-(RangeIter const& other) const { return x_ - other.x_; }
+  RangeIter operator+(int n) const { return RangeIter(x_+n); }
   RangeIter& operator++() {
     ++x_;
     return *this;

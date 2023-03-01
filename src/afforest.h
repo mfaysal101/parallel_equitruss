@@ -31,26 +31,28 @@ void Link(NodeT_ u, NodeT_ v, pvector<NodeT_>& comp) {
 
 
 // Reduce depth of tree for each component to 1 by crawling up parents
-template <typename GraphT_, typename NodeT_>
-void Compress(const GraphT_ &g, gapbs::pvector<NodeT_>& comp) {
+template <typename GraphT_, typename NodeT_, typename RangeT_>
+void Compress(const GraphT_ &g, RangeT_ &&r, gapbs::pvector<NodeT_>& comp) {
   #pragma omp parallel for schedule(dynamic, 16384)
-  for (NodeT_ n = 0; n < g.num_nodes(); n++) {
+  for (auto n_iter=r.begin(); n_iter != r.end(); ++n_iter) {
+    auto& n = *n_iter;
     while (comp[n] != comp[comp[n]]) {
       comp[n] = comp[comp[n]];
     }
   }
 }
 
-template <typename NodeT_>
+template <typename NodeT_, typename RangeT_>
 NodeT_ SampleFrequentElement(const gapbs::pvector<NodeT_>& comp,
+                             RangeT_&& r,
                              int64_t num_samples = 1024) {
   std::unordered_map<NodeT_, int> sample_counts(32);
   using kvp_type = typename std::unordered_map<NodeT_, int>::value_type;
   // Sample elements from 'comp'
   std::mt19937 gen;
-  std::uniform_int_distribution<NodeT_> distribution(0, comp.size() - 1);
+  std::uniform_int_distribution<NodeT_> distribution(0, r.end() - r.begin());
   for (NodeT_ i = 0; i < num_samples; i++) {
-    NodeT_ n = distribution(gen);
+    NodeT_ n = *( r.begin() + distribution(gen));
     sample_counts[comp[n]]++;
   }
   // Find most frequent element in samples (estimate of most frequent overall)
@@ -65,37 +67,40 @@ NodeT_ SampleFrequentElement(const gapbs::pvector<NodeT_>& comp,
   return most_frequent->first;
 }
 
-template <typename GraphT_, typename NodeT_>
-gapbs::pvector<NodeT_> Afforest(const GraphT_ &g, int32_t neighbor_rounds = 2) {
-  gapbs::pvector<NodeT_> comp(g.num_nodes());
-
+template <typename GraphT_, typename NodeT_, typename RangeT_>
+void Afforest(const GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
+              int32_t neighbor_rounds = 2) {
   // Initialize each node to a single-node self-pointing tree
   #pragma omp parallel for
-  for (NodeT_ n = 0; n < g.num_nodes(); n++)
+  for (auto n_iter=range.begin(); n_iter != range.end(); ++n_iter) {
+    auto& n = *n_iter;
     comp[n] = n;
+  }
 
   // Process a sparse sampled subgraph first for approximating components.
   // Sample by processing a fixed number of neighbors for each node (see paper)
   for (int r = 0; r < neighbor_rounds; ++r) {
   #pragma omp parallel for schedule(dynamic,16384)
-    for (NodeT_ u = 0; u < g.num_nodes(); u++) {
+    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+    auto& u = *u_iter;
       for (NodeT_ v : g.out_neigh(u, r)) {
         // Link at most one time if neighbor available at offset r
         Link(u, v, comp);
         break;
       }
     }
-    Compress(g, comp);
+    Compress(g, range, comp);
   }
 
   // Sample 'comp' to find the most frequent element -- due to prior
   // compression, this value represents the largest intermediate component
-  NodeT_ c = SampleFrequentElement(comp);
+  NodeT_ c = SampleFrequentElement(comp, range);
 
   // Final 'link' phase over remaining edges (excluding largest component)
   if (!g.directed()) {
     #pragma omp parallel for schedule(dynamic, 16384)
-    for (NodeT_ u = 0; u < g.num_nodes(); u++) {
+    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+      auto& u = *u_iter;
       // Skip processing nodes in the largest component
       if (comp[u] == c)
         continue;
@@ -106,7 +111,8 @@ gapbs::pvector<NodeT_> Afforest(const GraphT_ &g, int32_t neighbor_rounds = 2) {
     }
   } else {
     #pragma omp parallel for schedule(dynamic, 16384)
-    for (NodeT_ u = 0; u < g.num_nodes(); u++) {
+    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+      auto& u = *u_iter;
       if (comp[u] == c)
         continue;
       for (NodeT_ v : g.out_neigh(u, neighbor_rounds)) {
@@ -119,8 +125,7 @@ gapbs::pvector<NodeT_> Afforest(const GraphT_ &g, int32_t neighbor_rounds = 2) {
     }
   }
   // Finally, 'compress' for final convergence
-  Compress(g, comp);
-  return comp;
+  Compress(g, range, comp);
 }
 }
 #endif

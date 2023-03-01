@@ -20,6 +20,7 @@ Wrappers for compiler intrinsics for atomic memory operations (AMOs)
   #if defined __GNUC__
 
     // gcc/clang/icc instrinsics
+    #include <cstdint>
 
     template<typename T, typename U>
     T fetch_and_add(T &x, U inc) {

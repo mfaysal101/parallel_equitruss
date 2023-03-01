@@ -111,7 +111,11 @@ int main(int argc, char* argv[]) {
     return -1;
   Builder b(cli);
   Graph g = b.MakeGraph();
-  auto CCBound = [](const Graph& gr){ return Afforest<Graph,NodeID>(gr); };
+  auto CCBound = [](const Graph& gr){
+      gapbs::pvector<NodeID> comp(gr.num_nodes());
+      Afforest<Graph,NodeID>(gr, gr.vertices(), comp);
+      return comp;
+  };
   BenchmarkKernel(cli, g, CCBound, PrintCompStats, CCVerifier);
   return 0;
 }

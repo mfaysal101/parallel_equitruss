@@ -87,7 +87,7 @@ std::vector<std::pair<ValT, KeyT>> TopK(
 }
 
 
-bool VerifyUnimplemented(...) {
+inline bool VerifyUnimplemented(...) {
   std::cout << "** verify unimplemented **" << std::endl;
   return false;
 }

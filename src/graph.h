@@ -286,6 +286,10 @@ class CSRGraph {
     return *v_it;
   }
 
+  std::ptrdiff_t get_out_edge_offset(DestID_* e) {
+      return e - out_neighbors_;
+  }
+
  private:
   bool directed_;
   int64_t num_nodes_;

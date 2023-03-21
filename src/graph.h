@@ -290,6 +290,14 @@ class CSRGraph {
       return e - out_neighbors_;
   }
 
+  NodeID_ get_out_edge_owner(DestID_* e) {
+      //Use upper bound since empty vertices with have
+      //range out_index[empty_v] == out_index[empty_v+1]
+      //Thus we actually need to find the upper bound and subtract 1
+      auto u_ptr = std::upper_bound(out_index_, out_index_+num_nodes_+1, e);
+      return u_ptr - out_index_ - 1;
+  }
+
  private:
   bool directed_;
   int64_t num_nodes_;

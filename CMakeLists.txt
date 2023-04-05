@@ -14,6 +14,9 @@ add_subdirectory(gapbs-agile)
 add_executable(
   EquiTruss
   EquiTruss.cpp
+  ConnComp.cpp
+  GraphManip.cpp
+  EGraph.cpp
   )
 
 target_include_directories(EquiTruss PRIVATE ${CMAKE_SOURCE_DIR})

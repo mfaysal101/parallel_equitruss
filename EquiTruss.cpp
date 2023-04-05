@@ -1,47 +1,22 @@
-#include <stdio.h>
-#include <cstring>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string> 
-#include <set>
-#include <chrono>
-#include <omp.h>
-#include <algorithm>
-#include <vector>
-#include <map>
-#include<climits>
+#include "GraphManip.h"
+#include "ConnComp.h"
+#include "EGraph.h"
+#include "MergeSort.h"
 
-#include "gapbs-agile/src/benchmark.h"
-
-using namespace std;
-
-
-
-
-typedef std::vector<std::pair<int, int> > EdgeList;
-typedef std::vector<std::vector<int> > AdjList;
-
-
-AdjList adjlist;
-
-std::vector<int>parent;
-std::map<std::pair<int, int>, int> p;
-int numEdges;
-int numVertices;
-bool hooking;
-size_t maxk;
-std::vector<std::vector<int>> intersectlist;
-std::map<int, vector<pair<int, int>>>trussgroups;
-std::map<pair<int, int>, int> edge2index;
-//std::vector<std::set<pair<pair<int, int>, pair<int, int>>>> super_edges;
-std::vector<std::set<pair<int, int>>> super_edges;
-std::vector<std::pair<int, int>> summary_graph;
-int kmin, kmax;
-double hooking_time, compression_time, sp_edge_time, summary_merge_time;
+double hooking_time;
+double compression_time;
+double sp_edge_time;
+double summary_merge_time;
+double parallel_summary_graph_time;
+double gapbs_sv_conn_time;
+double gapbs_afforest_conn_time;
+double serial_sorting_time;
+double parallel_sorting_time;
 std::map<int, int>iters_per_k;
 
-class CLEquiTruss : public gapbs::CLApp {
+
+class CLEquiTruss : public gapbs::CLApp 
+{
     std::string _trussness_filename;
 public:
     CLEquiTruss(int argc, char** argv, std::string name)
@@ -60,671 +35,237 @@ public:
     std::string trussness_filename() const { return _trussness_filename; }
 };
 
-namespace
+void printComp(std::ofstream& out, const MyEdgeList& edges, gapbs::pvector<int>& comp)
 {
-	template <class InputIterator1, class InputIterator2>
-	vector<int> IntersectionSize(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, InputIterator2 last2, int n)
+	for(int i = 0; i < comp.size(); i++)
 	{
-		vector<int> result;
-		while (first1 != last1 && first2 != last2)
+		out << edges[i].first << "\t" << edges[i].second << "\t" << comp[i] << std::endl;
+	}
+}
+
+void printComp(std::ofstream& out, const MyEdgeList& edges, gapbs::pvector<int>& comp, gapbs::WGraph& support_)
+{
+	for(int i = 0; i < comp.size(); i++)
+	{
+		if(support_.get_unsafe(edges[i].first, edges[i].second).w > 2)
 		{
-			if (*first1 >= n || *first2 >= n)
-			{
-				break;
-			}
-			if (*first1 < *first2)
-			{
-				++first1;
-			}
-			else if (*first1 > *first2)
-			{
-				++first2;
-			}
-			else
-			{
-				result.push_back(*first1);
-				++first1;
-				++first2;
-			}
+			out << edges[i].first << "\t" << edges[i].second << "\t" << comp[i] << std::endl;	
 		}
-		return result;
 	}
 }
 
 
-size_t getNumVertices(const EdgeList& edges)
+void printEdgeParent(std::ofstream& out, GraphManip& gp)
 {
-	int num = 0;
-
-#pragma omp parallel for reduction (max:num)
-	for (size_t i = 0; i < edges.size(); i++)
+	for (auto it = gp.edge2P.begin(); it != gp.edge2P.end(); it++)
 	{
-		num = max(num, 1 + max(edges[i].first, edges[i].second));
-	}
-
-	numVertices = num;
-
-	cout << "Total number of vertices:" << numVertices << endl;
-
-	return numVertices;
-}
-
-EdgeList BuildEdgeListFrom(const gapbs::WGraph& support)
-{
-	EdgeList edgelist;
-        numEdges = support.num_edges();
-        edgelist.reserve(support.num_edges());
-        for ( int u = 0; u < support.num_nodes(); ++u ) {
-            for ( auto& dest : support.out_neigh(u) ) {
-                auto v = dest.v;
-                if ( u < v )
-                    edgelist.push_back({u,v});
-            }
-        }
-
-
-	cout << "Total number of edges:" << numEdges << endl;
-
-	sort(edgelist.begin(), edgelist.end(), [](const pair<int, int>& edge1, const pair<int, int>& edge2) {
-		return (edge1.first < edge2.first) || (edge1.first == edge2.first && edge1.second < edge2.second);
-		});
-        int index{0};
-	for(auto edge:edgelist)
-	{
-		edge2index[edge] = index++;
-	}
-	return edgelist;
-
-}
-
-void EdgeToAdjList(const EdgeList& edges)
-{
-	adjlist.resize(getNumVertices(edges));
-
-	for (auto edge : edges)
-	{
-		adjlist[edge.first].push_back(edge.second);
-		adjlist[edge.second].push_back(edge.first);
-	}
-
-}
-
-void printParent(ofstream& out)
-{
-	for (int i = 0; i < numVertices; i++)
-	{
-		out << i << "\t" << parent[i] << endl;
+		out << it->first.first << "\t" << it->first.second << "\t" << it->second << std::endl;
 	}
 	out.close();
 }
 
-void initializeParent()
-{
-	parent.resize(numVertices);
-
-	for (int i = 0; i < numVertices; i++)
-	{
-		parent[i] = i;
-	}
-}
-
-void parallel_hooking()
-{
-#pragma omp parallel for
-	for (int u = 0; u < numVertices; u++)
-	{
-		vector<int>& temp = adjlist[u];
-
-#pragma omp parallel for
-		for (int j = 0; j < temp.size(); j++)
-		{
-			int v = temp[j];
-
-			if (parent[u] < parent[v] && parent[v] == parent[parent[v]])
-			{
-				parent[parent[v]] = parent[u];
-				hooking = true;
-			}
-		}
-	}
-}
-
-void serial_hooking()
-{
-	for (int u = 0; u < numVertices; u++)
-	{
-		vector<int>& temp = adjlist[u];
-
-		for (int j = 0; j < temp.size(); j++)
-		{
-			int v = temp[j];
-
-			if (parent[u] < parent[v] && parent[v] == parent[parent[v]])
-			{
-				parent[parent[v]] = parent[u];
-				hooking = true;
-			}
-		}
-	}
-}
-
-void parallel_compression()
-{
-#pragma omp parallel for
-	for (int v = 0; v < numVertices; v++)
-	{
-		while (parent[parent[v]] != parent[v])
-		{
-			parent[v] = parent[parent[v]];
-		}
-	}
-}
-
-void serial_compression()
-{
-	for (int v = 0; v < numVertices; v++)
-	{
-		while (parent[parent[v]] != parent[v])
-		{
-			parent[v] = parent[parent[v]];
-		}
-	}
-}
-
-void shiloach_vishkin_parallel()
-{
-	hooking = true;
-
-	while (hooking)
-	{
-		hooking = false;
-		parallel_hooking();
-		parallel_compression();
-	}
-}
-
-void shiloach_vishkin_serial()
-{
-	hooking = true;
-
-	while (hooking)
-	{
-		hooking = false;
-		serial_hooking();
-		serial_compression();
-	}
-}
-
-void populateIntersectList(const EdgeList& edges)
-{
-	const int n = adjlist.size();
-
-	maxk = 0;
-
-	for (int i = 0; i < edges.size(); i++)
-	{
-		int u = edges[i].first;
-		int v = edges[i].second;
-
-		intersectlist[i] = IntersectionSize(adjlist[u].begin(), adjlist[u].end(), adjlist[v].begin(), adjlist[v].end(), n);
-
-		maxk = max(maxk, intersectlist[i].size());
-	}
-}
-
-void bucketSortedEdgelist(int kmax, const EdgeList& edges, vector<vector<int>>& sp, vector<pair<int, int>>& sorted_elbys, map<int, int>& svp, map<pair<int, int>, int>& sorted_ep)
-{
-	vector<int> bucket((kmax + 1), 0);
-
-	for (auto it = sp.begin(); it != sp.end(); it++)
-	{
-		bucket[(*it).size()]++;
-	}
-
-	int temp;
-
-	int pt = 0;
-
-	for (int i = 0; i < kmax + 1; i++)
-	{
-		temp = bucket[i];
-		bucket[i] = pt;
-		pt = pt + temp;
-	}
-
-	for (int i = 0; i < sp.size(); i++)
-	{
-		sorted_elbys[bucket[sp[i].size()]] =  edges[i];
-		sorted_ep.insert(make_pair(edges[i], bucket[sp[i].size()]));
-		if (svp.find(sp[i].size()) == svp.end())
-		{
-			svp.insert(make_pair(sp[i].size(), bucket[sp[i].size()]));
-		}
-		bucket[sp[i].size()] = bucket[sp[i].size()] + 1;
-	}
-
-}
-
-
-void computeTruss(const EdgeList& edges)
-{
-	map<int, pair<int, int>> klistdict;
-	vector<pair<int, int>> sorted_elbys(p.size());
-	map<pair<int, int>, int> sorted_ep;
-	map<int, int> svp;
-
-	bucketSortedEdgelist(maxk, edges, intersectlist, sorted_elbys, svp, sorted_ep);
-
-}
-
-
-void edge_hooking(gapbs::WGraph& support, const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
-{
-
-#pragma omp parallel for
-	for (int i = 0; i < phi_k.size(); i++)
-	{
-
-		auto e = phi_k[i];		//got the edge in the current k
-
-		int index = edge2index[e];
-
-		//printf("k:%d, (u,v):(%d,%d)\n", k, e.first, e.second);
-
-		vector<int>& temp = intersectlist[index];		//got the corresponding intersecting edges that makes triangle with e
-
-//#pragma omp parallel for
-		for (int j = 0; j < temp.size(); j++)
-		{
-			int w = temp[j];
-			int u = e.first;
-			int v = e.second;
-
-			pair<int, int> e1{min(u,w), max(u,w)};
-			pair<int, int> e2{min(v,w), max(v,w)};
-                        // returns a key, value pair, the value is specified by w (for weight)
-                        // should not be confused with w (the vertex)
-			int k1 = support.get_unsafe(u,w).w;
-                        int k2 = support.get_unsafe(v,w).w;
-
-			/*
-			if (k1 >= k && k2 >= k)	//ensuring k-triangle
-			{
-				if (p[e] < p[e1] && p[e1] == p[edges[p[e1]]] && k == k1)
-				{
-					p[edges[p[e1]]] = p[e];
-					hooking = true;
-				}
-
-				if (p[e] < p[e2] && p[e2] == p[edges[p[e2]]] && k == k2)
-				{
-					p[edges[p[e2]]] = p[e];
-					hooking = true;
-				}
-			}
-			*/
-
-			if (k1 >= k && k2 >= k)	//ensuring k-triangle
-			{
-				int comp_u = p[e];
-				int comp_v = p[e1];
-				
-				int high_comp = comp_u > comp_v ? comp_u : comp_v;
-				int low_comp = comp_u + (comp_v - high_comp);
-
-				if(low_comp < high_comp && high_comp == p[edges[high_comp]] && k == k1)
-				{
-					p[edges[high_comp]] = low_comp;
-					hooking = true;
-				}
-			
-				int comp_w = p[e2];
-
-				high_comp = comp_u > comp_w ? comp_u : comp_w;
-				low_comp = comp_u + (comp_w - high_comp);
- 				
-				if(low_comp < high_comp && high_comp == p[edges[high_comp]] && k == k2)
-				{
-					p[edges[high_comp]] = low_comp;
-					hooking = true;
-				}
-			}
-		}
-	}
-}
-
-
-void edge_compression(const EdgeList& edges, vector<pair<int, int>>& phi_k)
-{
-#pragma omp parallel for
-	for (int i = 0; i < phi_k.size(); i++)
-	{
-		auto e = phi_k[i];
-
-		//printf("(u,v):(%d,%d), p[(u,v)]:%d, p[edges[p[e]]]:%d)\n", e.first, e.second, p[e], p[edges[p[e]]]);
-		
-		int p_id = p[e];
-		int pp_id = p[edges[p_id]];
-
-		while (pp_id != p_id)    // p[e] will return me an index of an edge, using edges[p[e]] will return me the parent edge, applying p[edges[p[e]]] will return me the index of the parent edge
-		{
-			p[e] = pp_id;
-
-			p_id = pp_id;
-			pp_id = p[edges[p_id]];
-
-		}
-	}
-}
-
-
-void super_edge_creation(gapbs::WGraph& support, const EdgeList& edges, vector<pair<int, int>>& phi_k, int& k)
-{
-
-#pragma omp parallel for
-	for (int i = 0; i < phi_k.size(); i++)
-	{
-		size_t tid = omp_get_thread_num();
-
-		auto e = phi_k[i];		//got the edge in the current k
-
-		int index = edge2index[e];
-
-		vector<int>& temp = intersectlist[index];		//got the corresponding intersecting edges that makes triangle with e
-		
-		//printf("Shiloach-Vishkin parallel inside sp_edge_creation:(%d,%d), numtriangle:%d\n", e.first, e.second, temp.size());
-
-//#pragma omp parallel for
-		for (int j = 0; j < temp.size(); j++)
-		{
-			int w = temp[j];
-			int u = e.first;
-			int v = e.second;
-
-			pair<int, int> e1{min(u,w), max(u,w)};
-			pair<int, int> e2{min(v,w), max(v,w)};
-			int k1 = support.get_unsafe(u,w).w;
-                        int k2 = support.get_unsafe(v,w).w;
-
-			int lowest_k = min(k1, k2);
-			lowest_k = min(k, lowest_k);
-				
-			if(k > lowest_k && lowest_k == k1)
-			{
-				super_edges[tid].insert({p[e1], p[e]});				
-			}
-
-			if(k > lowest_k && lowest_k == k2)
-			{
-				super_edges[tid].insert({p[e2], p[e]});
-			}
-		}
-	}
-}
-
-
-void conn_comp_edge(gapbs::WGraph& support, const EdgeList& edges)
-{
-
-	size_t numThreads = 1;
-	#pragma omp parallel
-	{
-		numThreads = omp_get_num_threads();
-		#pragma omp single
-		{
-			super_edges.resize(numThreads);
-		}
-	}
-
-	int it_count = 0;
-
-	for (int i = kmin; i <= kmax; i++)
-	{
-		int it_count = 0;
-		hooking = true;
-		//printf("Shiloach-Vishkin parallel, k:%d\n", i);
-		while (hooking)
-		{
-			it_count++;
-			hooking = false;
-			auto hook_start = std::chrono::high_resolution_clock::now();
-			edge_hooking(support, edges, trussgroups[i], i);
-			auto hook_end = std::chrono::high_resolution_clock::now();
-			hooking_time += std::chrono::duration_cast<std::chrono::nanoseconds>(hook_end - hook_start).count();
-
-			auto comp_start = std::chrono::high_resolution_clock::now();
-			edge_compression(edges, trussgroups[i]);
-			auto comp_end = std::chrono::high_resolution_clock::now();
-			compression_time += std::chrono::duration_cast<std::chrono::nanoseconds>(comp_end - comp_start).count();
-		}
-		it_count++;	//this extra increment is to ensure the one extra iteration for super-edge creation (algorithm 5.5) is counted
-		iters_per_k.insert({i, it_count});
-		auto se_start = std::chrono::high_resolution_clock::now();
-		super_edge_creation(support, edges, trussgroups[i], i);
-		auto se_end = std::chrono::high_resolution_clock::now();
-		sp_edge_time += std::chrono::duration_cast<std::chrono::nanoseconds>(se_end - se_start).count();
-		
-	}
-}
-
-void readTruss(ifstream& in, gapbs::WGraph& support)
-{
-	string line = "";
-        vector<int>tuple;
-
-        auto setTrussness = [&support](int u, int v, int k) {
-            auto& dest_ = support.get_unsafe(u,v);
-            //operator() for NodeId returns the node id
-            if (dest_.v != v) {
-                cerr << "Error: unable to find vertex {"<<u<<","
-                     << v<<"} in graph" << endl;
-            }
-            dest_.w = k;
-        };
-
-	if (in.is_open())
-	{
-		while (getline(in, line))
-		{
-                        tuple.clear();
-			istringstream iss(line);
-			string token;
-
-			while (getline(iss, token, ','))
-			{
-				tuple.push_back(stoi(token));
-			}
-
-			pair<int, int> temp;
-			temp.first = tuple[0];
-			temp.second = tuple[1];
-			kmin = min(kmin, tuple[2]);
-			kmax = max(kmax, tuple[2]);
-                        //duplicated so that we store full trussness
-                        setTrussness(temp.first, temp.second, tuple[2]);
-                        setTrussness(temp.second, temp.first, tuple[2]);
-			trussgroups[tuple[2]].push_back(temp);
-		}
-	}
-	for (int i = 0; i < 3; i++)
-	{
-		trussgroups.erase(i);
-	}
-	kmin = max(kmin, 3);
-
-	in.close();
-}
-
-
-void sortEachAdjList()
-{
-	int len = adjlist.size();
-
-#pragma omp parallel for
-	for (int i = 0; i < len; i++)
-	{
-		sort(adjlist[i].begin(), adjlist[i].end());
-	}
-}
-
-void printEdgeParent(ofstream& out)
-{
-	for (auto it = p.begin(); it != p.end(); it++)
-	{
-		out << it->first.first << "\t" << it->first.second << "\t" << it->second << endl;
-	}
-	out.close();
-}
-
-void printSummaryGraph(ofstream& out)
+void printSummaryGraph(std::ofstream& out, std::set<std::pair<int, int>>& summary_graph)
 {
 	for (auto sp_edge : summary_graph)
 	{
-		out << sp_edge.first << "\t" << sp_edge.second << endl;
+		out << sp_edge.first << "\t" << sp_edge.second << std::endl;
 	}
 	out.close();
 }
 
-void initializeEdgeParent(const EdgeList& edges)
+
+void printSummaryGraph(std::ofstream& out, std::vector<std::pair<int, int>>& smG)
 {
-        #pragma omp parallel for
-	for (int i = 0; i < edges.size(); i++)
+	for (auto sp_edge : smG)
 	{
-		p[edges[i]] = i;
+		out << sp_edge.first << "\t" << sp_edge.second << std::endl;
 	}
+	out.close();
 }
 
-void createSummaryGraph(const EdgeList& edges)
+std::vector<int> sortingSpNodeParallel(gapbs::pvector<int>& comp_afforest)
 {
-	
-	auto summary_start = std::chrono::high_resolution_clock::now();
-	set<pair<int, int>> visited;
+	auto start = std::chrono::high_resolution_clock::now();
+	int N = comp_afforest.size();
+	std::vector<int>SNData(N, 0);
 
-	int total = 0;
-
-	for (int i = 0; i < super_edges.size(); i++)
+	#pragma omp parallel for
+	for(int i = 0; i < N; i++)
 	{
-		set<pair<int, int>> temp = super_edges[i];
-		printf("superedge vector:%d, size:%lu\n", i, temp.size());
-		total += temp.size();
-		for (auto it = temp.begin(); it != temp.end(); it++)
+		SNData[i] = i;
+	}
+
+	omp_set_dynamic(0);
+
+	MergeSort(SNData.begin(), SNData.end(), [&](const int edge_id1, const int edge_id2){
+		return (comp_afforest[edge_id1] < comp_afforest[edge_id2]);
+	});
+	auto end = std::chrono::high_resolution_clock::now();
+	parallel_sorting_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+	return SNData;   
+}
+
+std::vector<int> sortingSpNode(gapbs::pvector<int>& comp_afforest)
+{	
+	auto start = std::chrono::high_resolution_clock::now();
+	std::vector<int>SNData(comp_afforest.size(), 0);
+	for(int i = 0; i < comp_afforest.size(); i++)
+	{
+		SNData[i] = i;
+	}
+
+	std::sort(SNData.begin(), SNData.end(), [&](const int edge_id1, const int edge_id2){
+		return (comp_afforest[edge_id1] < comp_afforest[edge_id2]); 
+	});
+	auto end = std::chrono::high_resolution_clock::now();
+	serial_sorting_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+	return SNData;
+}
+
+void printSpNdClusters(std::ofstream& out, const std::vector<int>& sortedSNData, const gapbs::pvector<int>& comp_afforest)
+{
+	//out<<"length of the totaledges:"<<sortedSNData.size()<<std::endl;
+
+	std::map<int, std::set<int>>sorted_indices;
+
+	for(int i = 0; i < sortedSNData.size(); i++)
+	{
+		int index = sortedSNData[i];
+		sorted_indices[comp_afforest[index]].insert(index);
+		//out<<index<<"\t"<<comp_afforest[index]<<std::endl;
+	}
+
+	for(auto it = sorted_indices.begin(); it != sorted_indices.end(); it++)
+	{
+		auto comp_id = it->first;
+		auto comp_edges = it->second;
+		for(auto it2 = comp_edges.begin(); it2 != comp_edges.end(); it2++)
 		{
-
-			int p1 = p[edges[(*it).first]];
-			int p2 = p[edges[(*it).second]];
-			
-			//printf("%d\t%d\t%d\n", p1, p2, i);
-
-			//printf("thread id:%d, (c1, c2):(%d, %d)\t(p1, p2):(%d, %d)\n", i, (*it).first, (*it).second, p1, p2);	
-
-			if (!visited.count({ p1, p2 }))
-			{
-				summary_graph.push_back({ p1, p2 });
-				visited.insert({ p1, p2 });
-			}
+			out<<comp_id<<"\t"<<(*it2)<<std::endl;
 		}
 	}
-	printf("total pair of edges:%d\n", total);
-	auto summary_end = std::chrono::high_resolution_clock::now();
-	summary_merge_time += std::chrono::duration_cast<std::chrono::nanoseconds>(summary_end - summary_start).count();
+	out.close();
+}
+
+//This function renumbers the super node ids starting from 0. It converts the super node ids to splitter ids
+std::map<size_t, size_t> RenameSNIDs(const std::vector<int>& sortedSNData, const gapbs::pvector<int>& comp_afforest)
+{
+	std::map<size_t, size_t>reMap_SNIDs;
+
+	size_t splitter_id = 0;
+
+	for(int i = 0; i < sortedSNData.size(); i++)
+	{
+		size_t index = sortedSNData[i];
+		size_t snID = comp_afforest[index];
+		if(reMap_SNIDs.find(snID) == reMap_SNIDs.end())
+		{
+			reMap_SNIDs[snID] = splitter_id++;
+		}	
+	}
+	
+	return reMap_SNIDs;
+}
+
+void printRenamedSNIDs(std::ofstream& out, std::map<size_t, size_t> reMap_SNIDs)
+{
+	for(auto it = reMap_SNIDs.begin(); it != reMap_SNIDs.end(); it++)
+	{
+		out<<it->first<<"\t"<<it->second<<std::endl;
+	}
+	out.close();
 }
 
 int main(int argc, char* argv[])
 {
-        CLEquiTruss cli(argc, argv, "Equitruss-only");
-        if (!cli.ParseArgs())
-                return -1;
-        gapbs::WeightedBuilder b(cli);
-        gapbs::WGraph support = b.MakeGraph();
-        if ( support.directed() ) {
-            cout << "Input graph is directed but equitruss requires undirected" << endl;
-        }
-        support.PrintStats();
-
-	string trussfile = cli.trussness_filename();
-
-        kmin = std::numeric_limits<gapbs::WeightT>::max();
-	kmax = std::numeric_limits<gapbs::WeightT>::min();
-
-	EdgeList edgelist = BuildEdgeListFrom(support);
-
-	//ofstream out1("out1.txt"), out2("out2.txt");
-
-	ofstream out3("out3.txt"), out4("out4.txt");
-
-	ifstream trussinput(trussfile.c_str());
-        // This function currently read the trussness of all the edges from
-	// a file generated by serial code k-truss decomposition
-	readTruss(trussinput, support);
-        //Print out graph with trussness values
-        //support.PrintTopology();
-
-	EdgeToAdjList(edgelist);
-
-	intersectlist.resize(edgelist.size());
-
-	/*initializeParent();
-
-	auto s_start = std::chrono::high_resolution_clock::now();
-
-	shiloach_vishkin_serial();
-
-	auto s_end = std::chrono::high_resolution_clock::now();
-
-	auto s_time = std::chrono::duration_cast<std::chrono::nanoseconds>(s_end - s_start).count();
-
-	printParent(out1);
-
-	cout << "\nnow the parallel\n\n";
-
-	initializeParent();
-
-	auto p_start = std::chrono::high_resolution_clock::now();
-
-	shiloach_vishkin_parallel();
-
-	auto p_end = std::chrono::high_resolution_clock::now();
-
-	auto p_time = std::chrono::duration_cast<std::chrono::nanoseconds>(p_end - p_start).count();
-
-	printParent(out2);
-
-	printf("========serial_time:%0.9f===========\n", s_time * (1e-9));
-	printf("========parallel_time:%0.9f===========\n", p_time * (1e-9));
+	std::string networkfile;
+	std::string trussfile;
 	
-	*/
 
+	CLEquiTruss cli(argc, argv, "Equitruss-only");
+       	if (!cli.ParseArgs())
+	{
+		return -1;
+	}
+                
+       	gapbs::WeightedBuilder b(cli);
+       	gapbs::WGraph support = b.MakeGraph();
+       	if ( support.directed() ) 
+	{
+            std::cout << "Input graph is directed but equitruss requires undirected" << std::endl;
+       	}
+       	support.PrintStats();
+
+
+	networkfile = argv[1];
+	trussfile = argv[2];
+
+	std::string ktruss_input = cli.trussness_filename();
+
+	GraphManip gp;
+
+	//This is the old way (before gapbs) of reading edgelist from file, I am commenting out this one.
+	//MyEdgeList edgelist = gp.ReadEdgeListFromFile(networkfile.c_str());
+	//This is the new way of reading edgelist after gapbs integration
+	MyEdgeList edgelist = gp.BuildEdgeListFrom(support);
+	
+	std::ofstream out3("spNodes.txt"), out4("spEdges.txt"), out5("out5.txt"), out6("gapSV.txt"), out7("gapAfforest.txt"), out8("svNdTrimmed.txt"), out9("spNdClusters.txt"), out10("spNdClustersPar.txt"), out11("renamed_snIDs.txt");
+
+	ListOfList adjlist = gp.EdgeToAdjList(edgelist);
+	
+	// Sorting the adjacency list in-place for faster edge intersection
+	gp.sortInPlaceAdjList(adjlist);
+	
+	// declaring parent component ID for each edge
+	//map<Edge, int> p;
+	
 	// This function initialize the parent component ID of each edge to itself
-	initializeEdgeParent(edgelist);
+	gp.initializeEdgeParent(edgelist);
 
-	// Sorting the adjacency list for faster edge intersection
-        sortEachAdjList();
+	gp.populateIntersectList(edgelist, adjlist);
 
-	populateIntersectList(edgelist);
+	std::ifstream trussinput(ktruss_input.c_str());
+	// This function currently read the trussness of all the edges from
+	// a file generated by serial code k-truss decomposition
+	std::map<int, std::vector<MyEdge>> trussgroups = gp.readTruss(trussinput, support);
 
 	hooking_time = 0.0;
 	compression_time = 0.0;
 	sp_edge_time = 0.0;
 	summary_merge_time = 0.0;
+	parallel_summary_graph_time = 0.0;
+	gapbs_sv_conn_time = 0.0;
+	gapbs_afforest_conn_time = 0.0;
+	serial_sorting_time = 0.0;
+	parallel_sorting_time = 0.0;
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	// This function is the Shiloach-Vishkin connected component over edges
-	conn_comp_edge(support, edgelist);
+
+	EGraph egraph(support, gp, trussgroups, edgelist);
+
+	gapbs::pvector<int> comp = egraph.conn_comp();
+
+	gapbs::pvector<int> comp_afforest = egraph.conn_comp_afforest();
+
+
+	ConnComp sv;
+	// This function is the old way (before gapbs integration) Shiloach-Vishkin connected component over edges, commenting out this one
+	//std::vector<std::set<std::pair<int, int>>> super_edges = sv.conn_comp_edge(edgelist, trussgroups, gp);
+	// This is the new way of calling sv.conn_comp_edge() after gapbs integration
+	std::vector<std::set<std::pair<int, int>>> super_edges = sv.conn_comp_edge(support, edgelist, trussgroups, gp);
 
 	// This function is right now serial, need to design parallel implementation
-	createSummaryGraph(edgelist);
+	//std::set<std::pair<int, int>> summary_graph = sv.createSummaryGraph(super_edges);
+
+	std::vector<std::pair<int,int>> summaryG = sv.mergeSummaryGraph(super_edges);
 
 	auto end = std::chrono::high_resolution_clock::now();
-
+	
 	double totalExecutionTime = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
-	printf("========totalExecutionTime:%0.9f===========\n", totalExecutionTime*(1e-9));
-	printf("========Time for hooking phase:%0.9f===========\n", hooking_time*(1e-9));
-	printf("========Time for compression phase:%0.9f===========\n", compression_time*(1e-9));
-	printf("========Time for super edges creation phase:%0.9f===========\n", sp_edge_time*(1e-9));
-	printf("========Time for merging to summary graph creation:%0.9f===========\n", summary_merge_time*(1e-9));
-
+	
+	
 	int total_iters = 0;
 
 	for(auto it = iters_per_k.begin(); it != iters_per_k.end(); it++)
@@ -735,36 +276,42 @@ int main(int argc, char* argv[])
 
 	printf("total_iterations_for_hooking:%d\n", total_iters);
 
-	printEdgeParent(out3);
+	//printEdgeParent(out3, gp);
 
-	printSummaryGraph(out4);
+	//printSummaryGraph(out4, summary_graph);
+	
+	//printSummaryGraph(out5, summaryG);
+
+	std::vector<int> sortedSNData = sortingSpNode(comp_afforest);
+
+	std::vector<int> par_sortedSNData = sortingSpNodeParallel(comp_afforest);
+
+	std::map<size_t, size_t> reMap_SNIDs = RenameSNIDs(par_sortedSNData, comp_afforest);
+
+	printf("========totalExecutionTime:%0.9f===========\n", totalExecutionTime*(1e-9));
+	printf("========Time for hooking phase:%0.9f===========\n", hooking_time*(1e-9));
+	printf("========Time for compression phase:%0.9f===========\n", compression_time*(1e-9));
+	printf("========Time for super edges creation phase:%0.9f===========\n", sp_edge_time*(1e-9));
+	printf("========Time for merging to summary graph creation:%0.9f===========\n", summary_merge_time*(1e-9));
+	printf("========Time for parallel summary graph creation:%0.9f===========\n", parallel_summary_graph_time*(1e-9));
+	printf("========Time for gapbs ShiloachVishkin connected components:%0.9f===========\n", gapbs_sv_conn_time*(1e-9));
+	printf("========Time for gapbs Afforest connected components:%0.9f===========\n", gapbs_afforest_conn_time*(1e-9));
+	printf("========Time for sequential sorting connected components:%0.9f===========\n", serial_sorting_time*(1e-9));
+	printf("========Time for parallel sorting connected components:%0.9f===========\n", parallel_sorting_time*(1e-9));
+
+	
+	printComp(out6, edgelist, comp);
+
+	printComp(out7, edgelist, comp_afforest);
+
+	//printComp(out8, edgelist, comp, support);
+
+	printSpNdClusters(out9, sortedSNData, comp_afforest);
+
+	printSpNdClusters(out10, par_sortedSNData, comp_afforest);
+
+	printRenamedSNIDs(out11, reMap_SNIDs);
+
 
 	return 0;
 }
-
-class Edge
-{
-public:
-
-	int s;
-	int t;
-
-
-	Edge()
-	{
-
-	}
-
-	Edge(int source, int target)
-	{
-		s = source;
-		t = target;
-	}
-
-	// "<" operator overloading required by c++ map for custom object type
-	bool operator<(const Edge& ob) const
-	{
-		return s < ob.s || (s == ob.s && t < ob.t);
-	}
-
-};

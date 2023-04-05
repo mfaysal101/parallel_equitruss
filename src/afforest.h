@@ -5,9 +5,11 @@
 #include "pvector.h"
 #include <omp.h>
 
+
 #include <iostream>
 #include <random>
 #include <unordered_map>
+#include <iterator>
 
 namespace gapbs {
 
@@ -33,8 +35,8 @@ void Link(NodeT_ u, NodeT_ v, pvector<NodeT_>& comp) {
 // Reduce depth of tree for each component to 1 by crawling up parents
 template <typename GraphT_, typename NodeT_, typename RangeT_>
 void Compress(const GraphT_ &g, RangeT_ &&r, gapbs::pvector<NodeT_>& comp) {
-  #pragma omp parallel for schedule(dynamic, 16384)
-  for (auto n_iter=r.begin(); n_iter != r.end(); ++n_iter) {
+  #pragma omp parallel for
+  for (auto n_iter=r.begin(); n_iter < r.end(); ++n_iter) {
     auto& n = *n_iter;
     while (comp[n] != comp[comp[n]]) {
       comp[n] = comp[comp[n]];
@@ -50,9 +52,11 @@ NodeT_ SampleFrequentElement(const gapbs::pvector<NodeT_>& comp,
   using kvp_type = typename std::unordered_map<NodeT_, int>::value_type;
   // Sample elements from 'comp'
   std::mt19937 gen;
-  std::uniform_int_distribution<NodeT_> distribution(0, r.end() - r.begin());
+  NodeT_ dist = r.end() - r.begin();
+  std::uniform_int_distribution<NodeT_> distribution(0, dist-1);
   for (NodeT_ i = 0; i < num_samples; i++) {
-    NodeT_ n = *( r.begin() + distribution(gen));
+    NodeT_ howfar = distribution(gen);
+    NodeT_ n = *( r.begin() + howfar);
     sample_counts[comp[n]]++;
   }
   // Find most frequent element in samples (estimate of most frequent overall)
@@ -68,11 +72,11 @@ NodeT_ SampleFrequentElement(const gapbs::pvector<NodeT_>& comp,
 }
 
 template <typename GraphT_, typename NodeT_, typename RangeT_>
-void Afforest(const GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
+void Afforest(GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
               int32_t neighbor_rounds = 2) {
   // Initialize each node to a single-node self-pointing tree
   #pragma omp parallel for
-  for (auto n_iter=range.begin(); n_iter != range.end(); ++n_iter) {
+  for (auto n_iter=range.begin(); n_iter < range.end(); ++n_iter) {
     auto& n = *n_iter;
     comp[n] = n;
   }
@@ -80,8 +84,8 @@ void Afforest(const GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
   // Process a sparse sampled subgraph first for approximating components.
   // Sample by processing a fixed number of neighbors for each node (see paper)
   for (int r = 0; r < neighbor_rounds; ++r) {
-  #pragma omp parallel for schedule(dynamic,16384)
-    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+  #pragma omp parallel for
+    for (auto u_iter=range.begin(); u_iter < range.end(); ++u_iter) {
     auto& u = *u_iter;
       for (NodeT_ v : g.out_neigh(u, r)) {
         // Link at most one time if neighbor available at offset r
@@ -98,8 +102,8 @@ void Afforest(const GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
 
   // Final 'link' phase over remaining edges (excluding largest component)
   if (!g.directed()) {
-    #pragma omp parallel for schedule(dynamic, 16384)
-    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+    #pragma omp parallel for
+    for (auto u_iter=range.begin(); u_iter < range.end(); ++u_iter) {
       auto& u = *u_iter;
       // Skip processing nodes in the largest component
       if (comp[u] == c)
@@ -111,7 +115,7 @@ void Afforest(const GraphT_ &g, RangeT_ &&range, gapbs::pvector<NodeT_>& comp,
     }
   } else {
     #pragma omp parallel for schedule(dynamic, 16384)
-    for (auto u_iter=range.begin(); u_iter != range.end(); ++u_iter) {
+    for (auto u_iter=range.begin(); u_iter < range.end(); ++u_iter) {
       auto& u = *u_iter;
       if (comp[u] == c)
         continue;

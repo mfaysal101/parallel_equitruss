@@ -29,6 +29,16 @@ extern double gapbs_sv_conn_time;
 extern double gapbs_afforest_conn_time;
 extern double serial_sorting_time;
 extern double parallel_sorting_time;
+extern double serial_splitter_time;
+extern double parallel_splitter_time;
+extern double sp_edge_whole_time;
+extern double intersectlist_time;
+extern double truss_read_time;
+extern double graph_read_time;
+extern double edge2adj_time;
+extern double sorting_adj_time;
+extern double initializeP_time;
+extern double reMapping_compID_time;
 
 
 #endif

@@ -1,5 +1,5 @@
 #include "ConnComp.h"
-
+#include "MergeSort.h"
 
 
 void ConnComp::edge_hooking(const MyEdgeList& edges, std::vector<MyEdge>& phi_k, int& k, bool& hooking, GraphManip& gp)
@@ -252,6 +252,68 @@ void ConnComp::super_edge_creation(gapbs::WGraph& support, const MyEdgeList& edg
 	}
 }
 
+///This is super_edge_creation function overload for gapbs integration with entire edge set instead of phi_k set only
+
+void ConnComp::super_edge_creation(gapbs::WGraph& support, const MyEdgeList& edges, GraphManip& gp, std::vector<std::set<std::pair<int, int>>>& super_edges)
+{
+
+#pragma omp parallel for
+	for (size_t i = 0; i < edges.size(); i++)
+	{
+		size_t tid = omp_get_thread_num();
+
+		auto e = edges[i];
+
+		int index = gp.edge2index[e];
+
+		std::vector<int>& temp = gp.intersectlist[index];		//got the corresponding intersecting edges that makes triangle with e
+		
+		for (int j = 0; j < temp.size(); j++)
+		{
+			
+			int w = temp[j];
+			int u = e.first;
+			int v = e.second;
+
+			std::pair<int, int> e1{std::min(u,w), std::max(u,w)};
+			std::pair<int, int> e2{std::min(v,w), std::max(v,w)};
+
+			int k = support.get_unsafe(u,v).w;
+			int k1 = support.get_unsafe(u,w).w;
+			int k2 = support.get_unsafe(v,w).w;
+
+			int lowest_k = std::min(k1, k2);
+			lowest_k = std::min(k, lowest_k);
+
+			if(k > lowest_k && lowest_k == k1)
+			{	
+				int par1 = gp.edge2P[e1];
+				int par2 = gp.edge2P[e];
+				if(par1 > par2)
+				{
+					int temp = par1;
+					par1 = par2;
+					par2 = temp;
+				}
+				super_edges[tid].insert({par1, par2});								
+			}
+
+			if(k > lowest_k && lowest_k == k2)
+			{
+				int par1 = gp.edge2P[e2];
+				int par2 = gp.edge2P[e];
+				if(par1 > par2)
+				{
+					int temp = par1;
+					par1 = par2;
+					par2 = temp;
+				}
+				super_edges[tid].insert({par1, par2});
+			}
+		}
+	}
+}
+
 
 std::vector<std::set<std::pair<int, int>>> ConnComp::conn_comp_edge(const MyEdgeList& edges, std::map<int, std::vector<MyEdge>>& trussgroups, GraphManip& gp)
 {
@@ -310,6 +372,7 @@ std::vector<std::set<std::pair<int, int>>> ConnComp::conn_comp_edge(gapbs::WGrap
 	size_t numThreads = 1;
 	
 	std::vector<std::set<std::pair<int, int>>> super_edges;
+	std::vector<std::set<std::pair<int, int>>> super_edges_whole;
 	
 	#pragma omp parallel
 	{
@@ -317,6 +380,7 @@ std::vector<std::set<std::pair<int, int>>> ConnComp::conn_comp_edge(gapbs::WGrap
 		#pragma omp single
 		{
 			super_edges.resize(numThreads);
+			super_edges_whole.resize(numThreads);
 		}
 	}
 
@@ -351,7 +415,12 @@ std::vector<std::set<std::pair<int, int>>> ConnComp::conn_comp_edge(gapbs::WGrap
 		}
 	}
 	
+	auto se_whole_start = std::chrono::high_resolution_clock::now();
+	super_edge_creation(support, edges, gp, super_edges_whole);
+	auto se_whole_end = std::chrono::high_resolution_clock::now();
+	sp_edge_whole_time = std::chrono::duration_cast<std::chrono::nanoseconds>(se_whole_end - se_whole_start).count();
 	return super_edges;
+
 }
 
 
@@ -432,6 +501,7 @@ std::vector<std::pair<int, int>> ConnComp::mergeSummaryGraph(std::vector<std::se
 		
 	}
 	
+	//printf("Total num of sp edges:%lu\n", total_num_sp_edges);
 	auto end_t2 = std::chrono::high_resolution_clock::now();
 	t2 = std::chrono::duration_cast<std::chrono::nanoseconds>(end_t2 - start_t2).count();
 	
@@ -450,7 +520,7 @@ std::vector<std::pair<int, int>> ConnComp::mergeSummaryGraph(std::vector<std::se
 	{
 		int tid = omp_get_thread_num();
 		
-		printf("threads id:%d, number of local sp edge:%lu\n", tid, combined_thread_local_sm_g[tid].size());
+		//printf("threads id:%d, number of local sp edge:%lu\n", tid, combined_thread_local_sm_g[tid].size());
 		
 		for(int i = 0; i < combined_thread_local_sm_g[tid].size(); i++)
 		{
@@ -466,10 +536,15 @@ std::vector<std::pair<int, int>> ConnComp::mergeSummaryGraph(std::vector<std::se
 	
 	auto start_t4 = std::chrono::high_resolution_clock::now();
 	
+	/*
 	sort(final_sp_graph.begin(), final_sp_graph.end(), [](const std::pair<int, int>& edge1, const std::pair<int, int>& edge2) {
 		return (edge1.first < edge2.first) || (edge1.first == edge2.first && edge1.second < edge2.second);
 		});
-	
+	*/
+	MergeSort(final_sp_graph.begin(), final_sp_graph.end(), [](const std::pair<int, int>& edge1, const std::pair<int, int>& edge2) {
+		return (edge1.first < edge2.first) || (edge1.first == edge2.first && edge1.second < edge2.second);
+		});
+
 	auto end_t4 = std::chrono::high_resolution_clock::now();
 	t4 = std::chrono::duration_cast<std::chrono::nanoseconds>(end_t4 - start_t4).count();
 	

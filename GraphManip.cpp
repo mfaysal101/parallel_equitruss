@@ -112,6 +112,8 @@ MyEdgeList GraphManip::ReadEdgeListFromFile(const char* filename)
 
 MyEdgeList GraphManip::BuildEdgeListFrom(const gapbs::WGraph& support)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	MyEdgeList edgelist;
 	numEdges = support.num_edges();
 	edgelist.reserve(support.num_edges());
@@ -139,13 +141,19 @@ MyEdgeList GraphManip::BuildEdgeListFrom(const gapbs::WGraph& support)
 		edge2index[edge] = index++;
 	}
 	
+	auto end = std::chrono::high_resolution_clock::now();
+	graph_read_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
 	return edgelist;
+	
 }
 
 
 
 ListOfList GraphManip::EdgeToAdjList(const MyEdgeList& edges)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	ListOfList adjlist(getNumVertices(edges));
 
 	for (auto edge : edges)
@@ -154,6 +162,9 @@ ListOfList GraphManip::EdgeToAdjList(const MyEdgeList& edges)
 		adjlist[edge.second].push_back(edge.first);
 	}
 	
+	auto end = std::chrono::high_resolution_clock::now();
+	edge2adj_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
 	return adjlist;
 }
 
@@ -161,28 +172,39 @@ ListOfList GraphManip::EdgeToAdjList(const MyEdgeList& edges)
 
 void GraphManip::sortInPlaceAdjList(ListOfList& adjlist)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	int len = adjlist.size();
 
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int i = 0; i < len; i++)
 	{
 		sort(adjlist[i].begin(), adjlist[i].end());
 	}
+
+	auto end = std::chrono::high_resolution_clock::now();
+	sorting_adj_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }
 
 
 void GraphManip::populateIntersectList(const MyEdgeList& edges, ListOfList& adjlist)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	const int n = adjlist.size();
 	
 	intersectlist.resize(edges.size());
 
-	for (int i = 0; i < edges.size(); i++)
+	#pragma omp parallel for
+	for (size_t i = 0; i < edges.size(); i++)
 	{
 		int u = edges[i].first;
 		int v = edges[i].second;
 		intersectlist[i] = IntersectionSize(adjlist[u].begin(), adjlist[u].end(), adjlist[v].begin(), adjlist[v].end(), n);
 	}
+
+	auto end = std::chrono::high_resolution_clock::now();
+	intersectlist_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }
 
 
@@ -228,6 +250,8 @@ std::map<int, std::vector<MyEdge>> GraphManip::readTruss(std::ifstream& in)
 std::map<int, std::vector<MyEdge>> GraphManip::readTruss(std::ifstream& in, gapbs::WGraph& support)
 {
 	
+	auto start = std::chrono::high_resolution_clock::now();
+	
 	std::map<int, std::vector<MyEdge>> trussgroups;
 	std::string line = "";
 	std::vector<int>tuple;
@@ -264,8 +288,8 @@ std::map<int, std::vector<MyEdge>> GraphManip::readTruss(std::ifstream& in, gapb
 			kmin = std::min(kmin, tuple[2]);
 			kmax = std::max(kmax, tuple[2]);
 			//duplicated so that we store full trussness
-                        	setTrussness(temp.first, temp.second, tuple[2]);
-                        	setTrussness(temp.second, temp.first, tuple[2]);
+                     	setTrussness(temp.first, temp.second, tuple[2]);
+                     	setTrussness(temp.second, temp.first, tuple[2]);
 			trussgroups[tuple[2]].push_back(temp);
 		}
 	}
@@ -276,15 +300,23 @@ std::map<int, std::vector<MyEdge>> GraphManip::readTruss(std::ifstream& in, gapb
 	kmin = std::max(kmin, 3);
 
 	in.close();
-	
+
+	auto end = std::chrono::high_resolution_clock::now();
+	truss_read_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();	
+
 	return trussgroups;
 }
 
 
 void GraphManip::initializeEdgeParent(const MyEdgeList& edges)
 {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	for (int i = 0; i < edges.size(); i++)
 	{
 		edge2P[edges[i]] = i;
 	}
+	
+	auto end = std::chrono::high_resolution_clock::now();
+	initializeP_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }

@@ -89,7 +89,7 @@ gapbs::pvector<int> EGraph::conn_comp()
 
 	auto conn_end = std::chrono::high_resolution_clock::now();
 
-	gapbs_sv_conn_time += std::chrono::duration_cast<std::chrono::nanoseconds>(conn_end - conn_start).count();
+	gapbs_sv_conn_time = std::chrono::duration_cast<std::chrono::nanoseconds>(conn_end - conn_start).count();
 
 	return comp;
 }
@@ -123,7 +123,7 @@ gapbs::pvector<int> EGraph::conn_comp_afforest()
 
 	auto conn_end = std::chrono::high_resolution_clock::now();
 
-	gapbs_afforest_conn_time += std::chrono::duration_cast<std::chrono::nanoseconds>(conn_end - conn_start).count();
+	gapbs_afforest_conn_time = std::chrono::duration_cast<std::chrono::nanoseconds>(conn_end - conn_start).count();
 
 	return comp_afforest;
 }

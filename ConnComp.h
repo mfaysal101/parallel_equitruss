@@ -16,6 +16,7 @@ class ConnComp
 	void edge_compression(const MyEdgeList& edges, std::vector<MyEdge>& phi_k, GraphManip& gp);
 	void super_edge_creation(const MyEdgeList& edges, std::vector<MyEdge>& phi_k, int& k, GraphManip& gp, std::vector<std::set<std::pair<int, int>>>& super_edges);
 	void super_edge_creation(gapbs::WGraph& support, const MyEdgeList& edges, std::vector<MyEdge>& phi_k, int& k, GraphManip& gp, std::vector<std::set<std::pair<int, int>>>& super_edges);
+	void super_edge_creation(gapbs::WGraph& support, const MyEdgeList& edges, GraphManip& gp, std::vector<std::set<std::pair<int, int>>>& super_edges);
 	std::vector<std::set<std::pair<int, int>>> conn_comp_edge(const MyEdgeList& edges, std::map<int, std::vector<MyEdge>>& trussgroups, GraphManip& gp);
 	std::vector<std::set<std::pair<int, int>>> conn_comp_edge(gapbs::WGraph& support, const MyEdgeList& edges, std::map<int, std::vector<MyEdge>>& trussgroups, GraphManip& gp);
 	std::set<std::pair<int, int>> createSummaryGraph(std::vector<std::set<std::pair<int, int>>> super_edges);

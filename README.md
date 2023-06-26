@@ -14,7 +14,7 @@
 
 (2) There is a directory name gapbs-agile which is empty, please navigate to that directory and pull the code from the branch named "equitruss_infrastructure" from the same GitHub repository
 
-(3) Please make sure the directory hierarchy is maintained, inside the gapbs-agile directory, all the source files and directories should be as seen from "https://github.com/mfaysal101/parallel_equitruss/tree/ equitruss_infrastructure". There should not be any other directory in between them, e.g., the "src" directory should be gapbs-agile/src and not like gapbs-agile/other_directory/src.
+(3) Please make sure the directory hierarchy is maintained, inside the gapbs-agile directory, all the source files and directories should be as seen from "https://github.com/mfaysal101/parallel_equitruss/tree/equitruss_infrastructure". There should not be any other directory in between them, e.g., the "src" directory should be gapbs-agile/src and not like gapbs-agile/other_directory/src.
 
 
 # How to prepare the datasets for the experiments

@@ -19,6 +19,7 @@
 
 # How to prepare the datasets for the experiments
 Input datasets collected from "https://snap.stanford.edu/data/index.html"
+
 (1) Download the undirected networks from SNAP in the table titled "Networks with ground-truth communities"
 
 (2) For testing purposes, smaller networks, e.g., com-Amazon or com-DBLP are suggested
